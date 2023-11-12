@@ -10,6 +10,11 @@ st.markdown("# Hoya 1 - Capstone")
 
 text_input = st.text_input("URL for grant application:")
 
+grants_link = 'https://api.census.gov/data/2019.html'
+
+if st.button('Find Data'):
+    f'Please check {grants_link} for data'
+
 powerbi = "https://app.powerbi.com/view?r=eyJrIjoiYzkyNGUyYmItNjFjNi00Njg1LThmNjgtNTNiMWNmN2QwZWQyIiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
 components.iframe(powerbi, width=900, height=600)
 
