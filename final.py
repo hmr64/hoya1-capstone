@@ -45,28 +45,8 @@ st.markdown("# Hoya 1 - Capstone")
 
 text_input = st.text_input("URL for grant application:")
 
-# powerbi = "https://app.powerbi.com/view?r=eyJrIjoiYzA2OGVmZWUtY2U4Ny00MWUzLWEyOTMtMmUyZDgxYTExYmExIiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
-# components.iframe(powerbi, width=900, height=600)
+powerbi = "https://app.powerbi.com/view?r=eyJrIjoiYzkyNGUyYmItNjFjNi00Njg1LThmNjgtNTNiMWNmN2QwZWQyIiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
+components.iframe(powerbi, width=900, height=600)
 
-# Open up connection to database
-database = "capstone.db"
-conn = create_connection(database)
 
-data = {'Name': ['Alice', 'Bob', 'Charlie'],
-        'Age': [25, 30, 22],
-        'City': ['New York', 'San Francisco', 'Los Angeles']}
-
-df = pd.DataFrame(data)
-
-df.to_sql('data', conn, if_exists='replace',index=False)
-
-df2 = sql_to_dataframe(conn, "select * from data")
-st.markdown(df2.shape)
-
-str = ""
-for index, row in df2.iterrows():
-    str += f"Index: {index}, Name: {row['Name']}, Age: {row['Age']}, City: {row['City']}"
-    str += "\n\r\n"
-
-st.markdown(str)
 
