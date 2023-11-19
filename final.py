@@ -7,6 +7,7 @@ import sqlite3 as sql
 import sys
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
+import nltk
 from nltk.corpus import stopwords
 import numpy as np
 
@@ -38,6 +39,7 @@ def get_top_words(grant_text):
 
     # Create vectorizer
     custom_sw = ["research", "funding", "data", "study"]
+    nltk.download('stopwords')
     sw = stopwords.words("english") + custom_sw
     vec = CountVectorizer(stop_words = sw)
 
