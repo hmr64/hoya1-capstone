@@ -16,6 +16,22 @@ from FileReader.NihGrantReader import NihGrantReader
 from FileReader.BasePdfReader import BasePdfReader
 from FileReader.BaseHtmlReader import BaseHtmlReader
 from FileReader.BaseHtmlReader import BaseHtmlReader
+import StateCodes
+
+
+def create_connection(db_file):
+    """
+    Create databse connection to a SQLite database
+    Returns connection status
+    """
+    
+    conn = None
+    try:
+        conn = sql.connect(db_file)
+    except Error as e:
+        print(e)
+
+    return conn
 
 def read_text(link):
     reader = None
@@ -59,7 +75,7 @@ def get_top_words(grant_text):
     voc = np.array(vec.get_feature_names_out())
 
     # Set number of top words you want
-    n_words = 3
+    n_words = 5
 
     # Extract top words from voc
     imp_words = lambda x: [voc[each] for each in np.argsort(x)[:-n_words-1:-1]]
@@ -69,22 +85,51 @@ def get_top_words(grant_text):
 
     return words_in_topic[0]
 
-
 def main():
     st.markdown("# Hoya 1 - Capstone")
 
     link = st.text_input("URL for grant application:")
 
+    state = st.selectbox(label="Income", options=(list(StateCodes.states_dict.keys())))
+
     grants_link = 'https://api.census.gov/data/2019.html'
 
     if st.button('Find Data'):
+        if not link:
+            st.markdown("Please enter a grant url")
+
+        # Create db connection
+        database = "census_archive.db"
+        conn = create_connection(database)
+
         # Extract relevant text from provided grant url
         text = read_text(link)
+
+        if not text:
+            return
 
         # Use LDA to get top words of the grant
         top_words = get_top_words(text)
         
-        f'Top words in grant={top_words}'
+        sql_query = "select distinct title, access_url from census where"
+        for word in top_words:
+            sql_query += f" title like '%{word}%' or top_words like '%{word}%' or "
+
+        # Get relevant tables from census_archive database table
+        relevant_tables = pd.read_sql(sql_query[:-3], conn)
+
+        # TODO get variables
+        selected_vars = "PWSRWGT,PESEX,PEB1A"
+
+        for index, row in relevant_tables.iterrows():
+            api = f"{row['access_url']}?get={selected_vars}"
+            if StateCodes.states_dict[state] != "00":
+                api += f"&for=county:*&in=state:{StateCodes.states_dict[state]}"
+            st.markdown(f"[{row['title']}]({api})")
+
+
+
+        # Should we do a matching score??
 
     if st.toggle('View Dashboard'):
         powerbi = "https://app.powerbi.com/view?r=eyJrIjoiYWU3NTY5NjAtMWEzYi00Y2MzLWJlMzMtMjFlOGVkMDE2YTU2IiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
