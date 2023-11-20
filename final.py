@@ -90,7 +90,7 @@ def main():
 
     link = st.text_input("URL for grant application:")
 
-    state = st.selectbox(label="Income", options=(list(StateCodes.states_dict.keys())))
+    state = st.selectbox(label="Retrieve data for state:", options=(list(StateCodes.states_dict.keys())))
 
     grants_link = 'https://api.census.gov/data/2019.html'
 
