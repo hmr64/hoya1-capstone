@@ -10,6 +10,8 @@ from sklearn.decomposition import LatentDirichletAllocation
 import nltk
 from nltk.corpus import stopwords
 import numpy as np
+import requests
+import json
 
 from FileReader.BjaGrantReader import BjaGrantReader
 from FileReader.NihGrantReader import NihGrantReader
@@ -85,14 +87,13 @@ def get_top_words(grant_text):
 
     return words_in_topic[0]
 
+
 def main():
     st.markdown("# Hoya 1 - Capstone")
 
     link = st.text_input("URL for grant application:")
 
     state = st.selectbox(label="Retrieve data for state:", options=(list(StateCodes.states_dict.keys())))
-
-    grants_link = 'https://api.census.gov/data/2019.html'
 
     if st.button('Find Data'):
         if not link:
@@ -111,22 +112,36 @@ def main():
         # Use LDA to get top words of the grant
         top_words = get_top_words(text)
         
-        sql_query = "select distinct title, access_url from census where"
+        # Create query to return relevant tables
+        sql_query = "select distinct table_index, title, is_microdata, variable_link, access_url from census where is_microdata = 0 and ("
         for word in top_words:
             sql_query += f" title like '%{word}%' or top_words like '%{word}%' or "
 
-        # Get relevant tables from census_archive database table
-        relevant_tables = pd.read_sql(sql_query[:-3], conn)
+        sql_query = sql_query[:-3] + ") limit 5"
 
-        # TODO get variables
-        selected_vars = "PWSRWGT,PESEX,PEB1A"
+        # Use query to get relevant tables from census_archive database table
+        relevant_tables = pd.read_sql(sql_query, conn)
 
         for index, row in relevant_tables.iterrows():
+            
+            #expander = st.expander(f"[{row['title']}]({api})")
+            expander = st.expander(f"{row['title']}")
+
+            var_query = f"""select table_index, variable_name, variable_desc from variables 
+                            where table_index = {row['table_index']} 
+                            and variable_name not in ('for', 'in', 'ucgid')
+                            limit 10"""
+            table_vars = pd.read_sql(var_query, conn)
+
+            for var_index, var_row in table_vars.iterrows():
+                expander.write(f"{var_row['variable_name']}={var_row['variable_desc']}")
+
+            selected_vars = ",".join(table_vars['variable_name'])
             api = f"{row['access_url']}?get={selected_vars}"
             if StateCodes.states_dict[state] != "00":
                 api += f"&for=county:*&in=state:{StateCodes.states_dict[state]}"
-            st.markdown(f"[{row['title']}]({api})")
 
+            expander.write(api)
 
 
         # Should we do a matching score??

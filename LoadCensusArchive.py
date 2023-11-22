@@ -74,23 +74,48 @@ def main():
 	    print(f"Failed to retrieve data. Status code: {response.status_code}")
 
     # Create dataframe for all relevant info from census archive
-	columns = ['title', 'year', 'description', 'variable_link', 'is_microdata', 'top_words', 'access_url']
+	columns = ['table_index', 'title', 'year', 'description', 'variable_link', 'is_microdata', 'top_words', 'access_url']
 	df = pd.DataFrame(columns=columns)
 
 	# Cast coltype to bool
 	df['is_microdata'] = df['is_microdata'].astype(bool)
 
+	table_index = 1
 	for sd in json_data['dataset']:
+		title = sd.get('title')
+		year = sd.get('c_vintage')
 		description = sd.get('description')
+		variables_link = sd.get('c_variablesLink')
+		is_microdata = sd.get('c_isMicrodata', False)
 		desc_top_words = " ".join(top_words(description))
-		
-		row2 = [sd.get('title'), sd.get('c_vintage'), description, sd.get('c_variablesLink'), sd.get('c_isMicrodata', False), desc_top_words, sd['distribution'][0]['accessURL']]
+		access_url = sd['distribution'][0]['accessURL']
+
+		row2 = [table_index, title, year, description, variables_link, is_microdata, desc_top_words, access_url]
 		df = pd.concat([df, pd.DataFrame([row2], columns=columns)], ignore_index=True)
+		table_index += 1
 	    
-	df.head()
+	columns_vars = ['table_index', 'variable_name', 'variable_desc']
+	df2 = pd.DataFrame(columns=columns_vars)
+
+	# Iterate through all the grants and get a list of variables to store in the variable table
+	for index, row in df.iterrows():
+		is_microdata = row['is_microdata']
+
+        # We don't want to load the variables for microdata tables because there are too many
+		if not is_microdata:
+			vars_link = row['variable_link']
+			response_vars = requests.get(vars_link)
+
+			if response_vars.status_code == 200:
+				# Parse the JSON content from the response
+				json_vars = json.loads(response_vars.text)
+				for key in json_vars['variables']:
+					vars_row = [row['table_index'], key, json_vars['variables'][key]['label']]
+					df2 = pd.concat([df2, pd.DataFrame([vars_row], columns=columns_vars)], ignore_index=True)
 
 	# Write data to sql database
 	df.to_sql('census', conn, if_exists='replace',index=False)
+	df2.to_sql('variables', conn, if_exists='replace',index=False)
 
 
 
