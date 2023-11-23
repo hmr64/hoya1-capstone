@@ -74,7 +74,7 @@ def main():
 	    print(f"Failed to retrieve data. Status code: {response.status_code}")
 
     # Create dataframe for all relevant info from census archive
-	columns = ['table_index', 'title', 'year', 'description', 'variable_link', 'is_microdata', 'top_words', 'access_url']
+	columns = ['table_index', 'title', 'year', 'description', 'variable_link', 'groups_link', 'is_microdata', 'top_words', 'access_url', 'identifier']
 	df = pd.DataFrame(columns=columns)
 
 	# Cast coltype to bool
@@ -86,36 +86,56 @@ def main():
 		year = sd.get('c_vintage')
 		description = sd.get('description')
 		variables_link = sd.get('c_variablesLink')
+		groups_link = sd.get('c_groupsLink')
 		is_microdata = sd.get('c_isMicrodata', False)
 		desc_top_words = " ".join(top_words(description))
 		access_url = sd['distribution'][0]['accessURL']
+		identifier = sd['identifier']
 
-		row2 = [table_index, title, year, description, variables_link, is_microdata, desc_top_words, access_url]
+		row2 = [table_index, title, year, description, variables_link, groups_link, is_microdata, desc_top_words, access_url, identifier]
 		df = pd.concat([df, pd.DataFrame([row2], columns=columns)], ignore_index=True)
 		table_index += 1
 	    
-	columns_vars = ['table_index', 'variable_name', 'variable_desc']
-	df2 = pd.DataFrame(columns=columns_vars)
+	# columns_vars = ['table_index', 'variable_name', 'variable_desc']
+	# df2 = pd.DataFrame(columns=columns_vars)
+
+	# # Iterate through all the grants and get a list of variables to store in the variable table
+	# for index, row in df.iterrows():
+	# 	is_microdata = row['is_microdata']
+
+    #     # We don't want to load the variables for microdata tables because there are too many
+	# 	if not is_microdata:
+	# 		vars_link = row['variable_link']
+	# 		response_vars = requests.get(vars_link)
+
+	# 		if response_vars.status_code == 200:
+	# 			# Parse the JSON content from the response
+	# 			json_vars = json.loads(response_vars.text)
+	# 			for key in json_vars['variables']:
+	# 				vars_row = [row['table_index'], key, json_vars['variables'][key]['label']]
+	# 				df2 = pd.concat([df2, pd.DataFrame([vars_row], columns=columns_vars)], ignore_index=True)
+
+	columns_groups = ['table_index', 'group_name', 'group_desc']
+	df3 = pd.DataFrame(columns=columns_groups)
 
 	# Iterate through all the grants and get a list of variables to store in the variable table
-	for index, row in df.iterrows():
-		is_microdata = row['is_microdata']
+	# for index, row in df.iterrows():
 
-        # We don't want to load the variables for microdata tables because there are too many
-		if not is_microdata:
-			vars_link = row['variable_link']
-			response_vars = requests.get(vars_link)
+	# 	groups_link = row['groups_link']
+	# 	response_groups = requests.get(groups_link)
 
-			if response_vars.status_code == 200:
-				# Parse the JSON content from the response
-				json_vars = json.loads(response_vars.text)
-				for key in json_vars['variables']:
-					vars_row = [row['table_index'], key, json_vars['variables'][key]['label']]
-					df2 = pd.concat([df2, pd.DataFrame([vars_row], columns=columns_vars)], ignore_index=True)
+	# 	if response_groups.status_code == 200:
+	# 		# Parse the JSON content from the response
+	# 		json_groups = json.loads(response_groups.text)
+	# 		for key in json_groups['groups']:
+	# 			groups_row = [row['table_index'], key['name'], key['description']]
+	# 			df3 = pd.concat([df3, pd.DataFrame([groups_row], columns=columns_groups)], ignore_index=True)
+
 
 	# Write data to sql database
 	df.to_sql('census', conn, if_exists='replace',index=False)
-	df2.to_sql('variables', conn, if_exists='replace',index=False)
+	#df2.to_sql('variables', conn, if_exists='replace',index=False)
+	#df3.to_sql('groups', conn, if_exists='replace',index=False)
 
 
 

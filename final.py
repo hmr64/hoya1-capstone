@@ -87,6 +87,29 @@ def get_top_words(grant_text):
 
     return words_in_topic[0]
 
+def get_datalink_acs(identifier, group_name, state):
+    if group_name.startswith("S"):
+        identifier_clean = identifier[identifier.rfind('/')+1:].replace("ACSSPP1Y", "ACSST1Y")
+    elif group_name.startswith("DP"):
+        identifier_clean = identifier[identifier.rfind('/')+1:].replace("ACSST1Y", "ACSDP1Y")
+
+    datalink = f"https://data.census.gov/table/{identifier_clean}.{group_name}"
+    
+    if state != "00":
+        datalink += f"?g=040XX00US{state}"
+
+    return datalink
+
+def get_datalink(identifier, group_name, state):
+    identifier_clean = identifier[identifier.rfind('/')+1:]
+    datalink = f"https://data.census.gov/table/{identifier_clean}.{group_name}"
+    
+    if state != "00":
+        datalink += f"?g=040XX00US{state}"
+
+    return datalink
+
+
 
 def main():
     st.markdown("# Hoya 1 - Capstone")
@@ -113,7 +136,7 @@ def main():
         top_words = get_top_words(text)
         
         # Create query to return relevant tables
-        sql_query = "select distinct table_index, title, is_microdata, variable_link, access_url from census where is_microdata = 0 and ("
+        sql_query = "select distinct table_index, title, is_microdata, variable_link, access_url, identifier from census where is_microdata = 0 and ("
         for word in top_words:
             sql_query += f" title like '%{word}%' or top_words like '%{word}%' or "
 
@@ -127,22 +150,23 @@ def main():
             #expander = st.expander(f"[{row['title']}]({api})")
             expander = st.expander(f"{row['title']}")
 
-            var_query = f"""select table_index, variable_name, variable_desc from variables 
+            group_query = f"""select table_index, group_name, group_desc from groups 
                             where table_index = {row['table_index']} 
-                            and variable_name not in ('for', 'in', 'ucgid')
+                            and group_name not like '%PR'
                             limit 10"""
-            table_vars = pd.read_sql(var_query, conn)
+            table_groups = pd.read_sql(group_query, conn)
 
-            for var_index, var_row in table_vars.iterrows():
-                expander.write(f"{var_row['variable_name']}={var_row['variable_desc']}")
+            for group_index, group_row in table_groups.iterrows():
 
-            selected_vars = ",".join(table_vars['variable_name'])
-            api = f"{row['access_url']}?get={selected_vars}"
-            if StateCodes.states_dict[state] != "00":
-                api += f"&for=county:*&in=state:{StateCodes.states_dict[state]}"
-
-            expander.write(api)
-
+                if "/acs/" in row['access_url']:
+                    datalink = get_datalink_acs(row['identifier'], group_row['group_name'], StateCodes.states_dict[state])
+                    expander.write(f"[{group_row['group_desc']}]({datalink})")
+                elif "/absnesd" in row['access_url'] or \
+                    "/cre" in row['access_url']:
+                    datalink = get_datalink(row['identifier'], group_row['group_name'], StateCodes.states_dict[state])
+                    expander.write(f"[{group_row['group_desc']}]({datalink})")
+                else:
+                    expander.write(f"{group_row['group_name']}")
 
         # Should we do a matching score??
 
