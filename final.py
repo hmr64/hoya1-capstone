@@ -156,6 +156,12 @@ def main():
                             limit 10"""
             table_groups = pd.read_sql(group_query, conn)
 
+            if row['is_microdata'] == 1:
+                identifier = row['identifier']
+                datalink = f"https://data.census.gov/mdat/#/search?ds={identifier[identifier.rfind('/')+1:]}"
+                expander.write(f"[{group_row['group_desc']}]({datalink})")
+                continue
+
             for group_index, group_row in table_groups.iterrows():
 
                 if "/acs/" in row['access_url']:
@@ -170,9 +176,8 @@ def main():
 
         # Should we do a matching score??
 
-    if st.toggle('View Dashboard'):
-        powerbi = "https://app.powerbi.com/view?r=eyJrIjoiM2U2NDMzNTEtZTNkYy00MjIxLTk2ZjUtZGRhNTVhYWI1YzI0IiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
-        components.iframe(powerbi, width=900, height=600)
+    powerbi = "https://app.powerbi.com/view?r=eyJrIjoiM2U2NDMzNTEtZTNkYy00MjIxLTk2ZjUtZGRhNTVhYWI1YzI0IiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
+    components.iframe(powerbi, width=900, height=600)
 
     
 
