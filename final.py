@@ -112,7 +112,7 @@ def get_datalink(identifier, group_name, state):
 
 
 def main():
-    st.markdown("# Hoya 1 - Capstone")
+    st.markdown("# Grant Application Data Matching")
 
     link = st.text_input("URL for grant application:")
 
@@ -175,7 +175,7 @@ def main():
                     expander.write(f"{group_row['group_name']}")
 
         # Should we do a matching score??
-
+    st.markdown("# Learn More About Grants")
     powerbi = "https://app.powerbi.com/view?r=eyJrIjoiM2U2NDMzNTEtZTNkYy00MjIxLTk2ZjUtZGRhNTVhYWI1YzI0IiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
     components.iframe(powerbi, width=900, height=600)
 
