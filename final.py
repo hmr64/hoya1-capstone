@@ -12,6 +12,7 @@ from nltk.corpus import stopwords
 import numpy as np
 import requests
 import json
+import time
 
 from FileReader.BjaGrantReader import BjaGrantReader
 from FileReader.NihGrantReader import NihGrantReader
@@ -53,45 +54,43 @@ def read_text(link):
     return reader.extract_text(False)
 
 def get_top_words(grant_text):
-    ### LDA to get the topic of the grant
 
     # Create vectorizer
-    custom_sw = ["research", "funding", "data", "study"]
+    custom_sw = ["research", "funding", "data", "study", "use"]
     nltk.download('stopwords')
     sw = stopwords.words("english") + custom_sw
     vec = CountVectorizer(stop_words = sw)
 
-    # Create document-term matrix
-    fit_X = vec.fit_transform([grant_text])
-
-    # Create lda
-    # Since there is only one document here, there is only 1 topic. We will update this when we have more docs to read in.
-    lda = LatentDirichletAllocation(n_components = 1, random_state = 678)
-
-    # Fit lda
-    doc_topics = lda.fit_transform(fit_X)
+    # Fit and transform the data
+    X = vec.fit_transform([grant_text])
     
-    ### Extract top words from the topic
+    # Summing the occurrences of each word
+    word_counts = X.sum(axis=0)
+    
+    # Get the feature names
+    words = vec.get_feature_names_out()
+    
+    # Combine words with their counts
+    word_counts = list(zip(words, word_counts.flat))
+    
+    # Sort words by counts in descending order
+    word_counts.sort(key=lambda x: x[1], reverse=True)
 
-    # Get feature names (vocabulary)
-    voc = np.array(vec.get_feature_names_out())
-
-    # Set number of top words you want
-    n_words = 5
-
-    # Extract top words from voc
-    imp_words = lambda x: [voc[each] for each in np.argsort(x)[:-n_words-1:-1]]
-
-    # Use important words to extract words with the highest weights from the lda model
-    words_in_topic = ([imp_words(x) for x in lda.components_])
-
-    return words_in_topic[0]
+    # Select number of words we want
+    num_words = 5
+        
+    # Get top n words
+    words = [word for word, count in word_counts[:num_words]]
+    
+    return words
 
 def get_datalink_acs(identifier, group_name, state):
     if group_name.startswith("S"):
         identifier_clean = identifier[identifier.rfind('/')+1:].replace("ACSSPP1Y", "ACSST1Y")
     elif group_name.startswith("DP"):
         identifier_clean = identifier[identifier.rfind('/')+1:].replace("ACSST1Y", "ACSDP1Y")
+    else:
+        identifier_clean = identifier[identifier.rfind('/')+1:]
 
     datalink = f"https://data.census.gov/table/{identifier_clean}.{group_name}"
     
@@ -109,6 +108,121 @@ def get_datalink(identifier, group_name, state):
 
     return datalink
 
+def get_matched_words(dataset_top_words, dataset_title, grant_top_words):
+    top_words_dataset = dataset_top_words.split() + dataset_title.lower().split()
+    matched_words = list(set(grant_top_words).intersection(top_words_dataset))
+    return ', '.join(matched_words)
+
+def load_dataset_expanders(conn, relevant_tables, top_words, state):
+
+    for index, row in relevant_tables.iterrows():
+        
+        expander = st.expander(f"{row['year']}: {row['title']}")
+
+        sql_group_matches = ""
+        for word in top_words:
+            sql_group_matches += f" group_desc like '%{word}%' or "
+
+        group_query = f"""select table_index, group_name, group_desc from groups 
+                        where table_index = {row['table_index']} 
+                        and group_name not like '%PR'
+                        and ({sql_group_matches[:-3]}) 
+                        limit 10"""
+        table_groups_match = pd.read_sql(group_query, conn)
+
+        group_query = f"""select table_index, group_name, group_desc from groups 
+                        where table_index = {row['table_index']} 
+                        and group_name not like '%PR'
+                        limit {10 - table_groups_match.shape[0]}"""
+        table_groups_filler = pd.read_sql(group_query, conn)
+
+        table_groups = pd.concat([table_groups_match, table_groups_filler], ignore_index=True, axis=0)
+        table_groups = table_groups.drop_duplicates()
+
+        if row['is_microdata'] == 1:
+            identifier = row['identifier']
+            datalink = f"https://data.census.gov/mdat/#/search?ds={identifier[identifier.rfind('/')+1:]}"
+            expander.write(f"[{row['year']}- {row['title']}]({datalink})")
+            matches = get_matched_words(row['top_words'], row["title"], top_words)
+            if len(matches) > 0:
+                expander.write(f"Matched words: {matches}")
+            continue
+
+        for group_index, group_row in table_groups.iterrows():
+
+            if "/acs/" in row['access_url']:
+                datalink = get_datalink_acs(row['identifier'], group_row['group_name'], StateCodes.states_dict[state])
+                expander.write(f"[{group_row['group_desc']}]({datalink})")
+            elif "/absnesd" in row['access_url'] or \
+                "/cre" in row['access_url'] or \
+                "/pep/population" in row['access_url'] or \
+                "/nonemp" in row['access_url']:
+                datalink = get_datalink(row['identifier'], group_row['group_name'], StateCodes.states_dict[state])
+                expander.write(f"[{group_row['group_desc']}]({datalink})")
+            else:
+                expander.write(f"{group_row['group_name']}")
+
+        if table_groups.shape[0] == 10:
+            expander.write(f"See all tables: {row['groups_link']}")
+
+        if table_groups.shape[0] > 0:
+            #expander.write(f"Top words grant: {top_words}")
+            #expander.write(f"Top words dataset: {top_words_dataset}")
+            matches = get_matched_words(row['top_words'], row["title"], top_words)
+            if len(matches) > 0:
+                expander.write(f"Matched words: {matches}")
+
+    return relevant_tables.shape[0]
+
+
+def perform_matching(link, state):
+    if not link:
+        st.error('Please enter a link to the grant application')
+        return
+
+    # Create db connection
+    database = "census_archive.db"
+    conn = create_connection(database)
+
+    # Extract relevant text from provided grant url
+    text = read_text(link)
+
+    if not text:
+        st.error('Unable to read grant text, please verify format is .pdf or .html')
+        return
+
+    # Get top words of the grant
+    top_words = get_top_words(text)
+
+    sql_matches = ""
+    for word in top_words:
+            sql_matches += f" title like '%{word}%' or top_words like '%{word}%' or "
+
+    sql_query = f"""select distinct table_index, title, year, is_microdata, access_url, identifier, top_words, groups_link  
+                from census 
+                where ({sql_matches[:-3]}) 
+                and title not like '%Puerto Rico%'
+                order by year desc"""
+
+    relevant_tables = pd.read_sql(sql_query, conn)
+    df_no_duplicates = relevant_tables.drop_duplicates(subset='title', keep='first')
+
+    num_datasets = load_dataset_expanders(conn, df_no_duplicates.head(15), top_words, state)
+
+    # If we can't find any matching census datasets, display generic ones
+    if num_datasets == 0:
+        st.warning('No matching datasets found, please explore these common tables')
+        sql_query = f"""select distinct table_index, title, year, is_microdata, access_url, identifier, top_words, groups_link 
+                from census 
+                where (title = 'American Community Survey: 1-Year Estimates: Detailed Tables 1-Year' 
+                or title = 'Population Estimates: Population Estimates' 
+                or title = 'Current Population Survey: Basic Monthly')
+                order by year desc"""
+
+        standard_tables = pd.read_sql(sql_query, conn)
+        df_no_duplicates = standard_tables.drop_duplicates(subset='title', keep='first')
+        load_dataset_expanders(conn, df_no_duplicates, top_words, state)
+
 
 
 def main():
@@ -116,67 +230,13 @@ def main():
 
     link = st.text_input("URL for grant application:")
 
-    state = st.selectbox(label="Retrieve data for state:", options=(list(StateCodes.states_dict.keys())))
+    state = st.selectbox(label="Filter data for state:", options=(list(StateCodes.states_dict.keys())))
 
     if st.button('Find Data'):
-        if not link:
-            st.markdown("Please enter a grant url")
-
-        # Create db connection
-        database = "census_archive.db"
-        conn = create_connection(database)
-
-        # Extract relevant text from provided grant url
-        text = read_text(link)
-
-        if not text:
-            return
-
-        # Use LDA to get top words of the grant
-        top_words = get_top_words(text)
+        perform_matching(link, state)
         
-        # Create query to return relevant tables
-        sql_query = "select distinct table_index, title, is_microdata, variable_link, access_url, identifier from census where is_microdata = 0 and ("
-        for word in top_words:
-            sql_query += f" title like '%{word}%' or top_words like '%{word}%' or "
-
-        sql_query = sql_query[:-3] + ") limit 5"
-
-        # Use query to get relevant tables from census_archive database table
-        relevant_tables = pd.read_sql(sql_query, conn)
-
-        for index, row in relevant_tables.iterrows():
-            
-            #expander = st.expander(f"[{row['title']}]({api})")
-            expander = st.expander(f"{row['title']}")
-
-            group_query = f"""select table_index, group_name, group_desc from groups 
-                            where table_index = {row['table_index']} 
-                            and group_name not like '%PR'
-                            limit 10"""
-            table_groups = pd.read_sql(group_query, conn)
-
-            if row['is_microdata'] == 1:
-                identifier = row['identifier']
-                datalink = f"https://data.census.gov/mdat/#/search?ds={identifier[identifier.rfind('/')+1:]}"
-                expander.write(f"[{group_row['group_desc']}]({datalink})")
-                continue
-
-            for group_index, group_row in table_groups.iterrows():
-
-                if "/acs/" in row['access_url']:
-                    datalink = get_datalink_acs(row['identifier'], group_row['group_name'], StateCodes.states_dict[state])
-                    expander.write(f"[{group_row['group_desc']}]({datalink})")
-                elif "/absnesd" in row['access_url'] or \
-                    "/cre" in row['access_url']:
-                    datalink = get_datalink(row['identifier'], group_row['group_name'], StateCodes.states_dict[state])
-                    expander.write(f"[{group_row['group_desc']}]({datalink})")
-                else:
-                    expander.write(f"{group_row['group_name']}")
-
-        # Should we do a matching score??
     st.markdown("# Learn More About Grants")
-    powerbi = "https://app.powerbi.com/view?r=eyJrIjoiM2U2NDMzNTEtZTNkYy00MjIxLTk2ZjUtZGRhNTVhYWI1YzI0IiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
+    powerbi = "https://app.powerbi.com/view?r=eyJrIjoiYzJkZDJiOGQtMjFmNS00MTBjLThjODgtOGMzMzI2OTU3Mjg5IiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
     components.iframe(powerbi, width=900, height=600)
 
     
