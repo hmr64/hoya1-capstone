@@ -109,14 +109,19 @@ def get_datalink(identifier, group_name, state):
     return datalink
 
 def get_matched_words(dataset_top_words, dataset_title, grant_top_words):
+
     top_words_dataset = dataset_top_words.split() + dataset_title.lower().split()
+
+    top_words_dataset = [word[:-1] if word.endswith('s') else word for word in top_words_dataset]
+    grant_top_words = [word[:-1] if word.endswith('s') else word for word in grant_top_words]
+
     matched_words = list(set(grant_top_words).intersection(top_words_dataset))
     return ', '.join(matched_words)
 
 def load_dataset_expanders(conn, relevant_tables, top_words, state):
 
     for index, row in relevant_tables.iterrows():
-        
+
         expander = st.expander(f"{row['year']}: {row['title']}")
 
         sql_group_matches = ""
@@ -170,9 +175,9 @@ def load_dataset_expanders(conn, relevant_tables, top_words, state):
         if table_groups.shape[0] == 10:
             expander.write(f"See all tables: {row['groups_link']}")
 
-        if table_groups.shape[0] > 0:
+        if table_groups.shape[0] >= 0:
             #expander.write(f"Top words grant: {top_words}")
-            #expander.write(f"Top words dataset: {top_words_dataset}")
+            #expander.write(f"Top words dataset: {row['top_words'].split() + row['title'].lower().split()}")
             matches = get_matched_words(row['top_words'], row["title"], top_words)
             if len(matches) > 0:
                 expander.write(f"Matched words: {matches}")
