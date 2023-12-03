@@ -212,7 +212,7 @@ def perform_matching(link, state):
     relevant_tables = pd.read_sql(sql_query, conn)
     df_no_duplicates = relevant_tables.drop_duplicates(subset='title', keep='first')
 
-    num_datasets = load_dataset_expanders(conn, df_no_duplicates.head(15), top_words, state)
+    num_datasets = load_dataset_expanders(conn, df_no_duplicates.head(10), top_words, state)
 
     # If we can't find any matching census datasets, display generic ones
     if num_datasets == 0:
