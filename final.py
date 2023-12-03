@@ -235,7 +235,7 @@ def main():
     if st.button('Find Data'):
         perform_matching(link, state)
         
-    st.markdown("# Learn More About Grants")
+    st.markdown("## Learn More About Grants")
     powerbi = "https://app.powerbi.com/view?r=eyJrIjoiYzJkZDJiOGQtMjFmNS00MTBjLThjODgtOGMzMzI2OTU3Mjg5IiwidCI6ImZkNTcxMTkzLTM4Y2ItNDM3Yi1iYjU1LTYwZjI4ZDY3YjY0MyIsImMiOjF9"
     components.iframe(powerbi, width=900, height=600)
 
