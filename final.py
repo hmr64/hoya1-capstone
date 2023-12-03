@@ -142,6 +142,10 @@ def load_dataset_expanders(conn, relevant_tables, top_words, state):
         if row['is_microdata'] == 1:
             identifier = row['identifier']
             datalink = f"https://data.census.gov/mdat/#/search?ds={identifier[identifier.rfind('/')+1:]}"
+
+            if state != "00":
+                datalink += f"&rv=ucgid&g=0400000US{StateCodes.states_dict[state]}"
+
             expander.write(f"[{row['year']}- {row['title']}]({datalink})")
             matches = get_matched_words(row['top_words'], row["title"], top_words)
             if len(matches) > 0:
