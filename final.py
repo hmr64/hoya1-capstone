@@ -120,7 +120,16 @@ def get_matched_words(dataset_top_words, dataset_title, grant_top_words):
 
 def load_dataset_expanders(conn, relevant_tables, top_words, state):
 
+    relevant_tables['match_list'] = None
+
     for index, row in relevant_tables.iterrows():
+        matches = get_matched_words(row['top_words'], row["title"], top_words)
+        relevant_tables.at[index, 'match_list'] = matches
+
+    relevant_tables_sorted = relevant_tables.sort_values(by='match_list', key=lambda x: x.str.len(), ascending=False)
+    
+
+    for index, row in relevant_tables_sorted.iterrows():
 
         expander = st.expander(f"{row['year']}: {row['title']}")
 
@@ -178,9 +187,8 @@ def load_dataset_expanders(conn, relevant_tables, top_words, state):
         if table_groups.shape[0] >= 0:
             #expander.write(f"Top words grant: {top_words}")
             #expander.write(f"Top words dataset: {row['top_words'].split() + row['title'].lower().split()}")
-            matches = get_matched_words(row['top_words'], row["title"], top_words)
-            if len(matches) > 0:
-                expander.write(f"Matched words: {matches}")
+            if len(row['match_list']) > 0:
+                expander.write(f"Matched words: {row['match_list']}")
 
     return relevant_tables.shape[0]
 
